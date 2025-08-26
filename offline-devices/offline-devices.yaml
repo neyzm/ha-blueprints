@@ -5,78 +5,58 @@ blueprint:
     **Version: v1.1**
   domain: automation
   input:
-    duration:
-      name: Duration
-      description: Set Hours, Minutes, or both. Sensors not seen within this duration are considered offline. 
-      default: {}
+    duration_hours:
+      name: Duration - Hours
+      description: Set the hours for 'not seen'. Sensors not seen within this duration are considered offline.
       selector:
-        object:
-      inputs:
-        hours:
-          name: Hours
-          description: Set the hours for 'not seen'.
-          icon: mdi:clock-outline
-          selector:
-            number:
-              min: 1.0
-              max: 24.0
-              unit_of_measurement: h
-              mode: slider
-              step: 1.0
-        minutes:
-          name: Minutes
-          description: Set the minutes for 'not seen'.
-          icon: mdi:timer
-          selector:
-            number:
-              min: 0.0
-              max: 59.0
-              unit_of_measurement: min
-              mode: slider
-              step: 1.0
-    schedule:
-      name: Schedule
-      description: Set time and day the test should run.
-      icon: mdi:calendar-clock
-      default: {}
+        number:
+          min: 1.0
+          max: 24.0
+          unit_of_measurement: h
+          mode: slider
+          step: 1.0
+    duration_minutes:
+      name: Duration - Minutes
+      description: Set the minutes for 'not seen'.
       selector:
-        object:
-      inputs:
-        time:
-          name: Time
-          description: Input time
-          icon: mdi:clock
-          default: '10:00:00'
-          selector:
-            time: {}
-        day:
-          name: Day
-          description: Set a specific day or run everyday.
-          icon: mdi:calendar
-          default: 0
-          selector:
-            select:
-              options:
-                - value: 0
-                  label: Everyday
-                - value: 1
-                  label: Monday
-                - value: 2
-                  label: Tuesday
-                - value: 3
-                  label: Wednesday
-                - value: 4
-                  label: Thursday
-                - value: 5
-                  label: Friday
-                - value: 6
-                  label: Saturday
-                - value: 7
-                  label: Sunday
+        number:
+          min: 0.0
+          max: 59.0
+          unit_of_measurement: min
+          mode: slider
+          step: 1.0
+    schedule_time:
+      name: Schedule - Time
+      description: Input time when the test should run.
+      default: '10:00:00'
+      selector:
+        time: {}
+    schedule_day:
+      name: Schedule - Day
+      description: Set a specific day or run everyday.
+      default: 0
+      selector:
+        select:
+          options:
+            - value: 0
+              label: Everyday
+            - value: 1
+              label: Monday
+            - value: 2
+              label: Tuesday
+            - value: 3
+              label: Wednesday
+            - value: 4
+              label: Thursday
+            - value: 5
+              label: Friday
+            - value: 6
+              label: Saturday
+            - value: 7
+              label: Sunday
     exclude:
       name: Excluded Sensors
       description: Choose sensors with `last_seen` or `timestamp` in the name to be excluded from detection.
-      icon: mdi:cancel
       default:
         entity_id: []
       selector:
@@ -86,14 +66,13 @@ blueprint:
     actions:
       name: Actions
       description: Use Actions to create notifications. Use `{{sensors}}` to output the offline devices.
-      icon: mdi:code-braces
       selector:
         action: {}
 
 variables:
-  day: !input 'schedule.day'
-  hours: !input 'duration.hours'
-  minutes: !input 'duration.minutes'
+  day: !input 'schedule_day'
+  hours: !input 'duration_hours'
+  minutes: !input 'duration_minutes'
   exclude: !input 'exclude'
   sensors: "{% set result = namespace(sensors=[]) %}\
     {% for state in states.sensor | rejectattr('attributes.device_class', 'undefined') | selectattr('attributes.device_class', '==', 'timestamp') %}\
@@ -107,7 +86,7 @@ variables:
         {% elif diff < 86400 %}\
           {% set last_seen = ((diff / 3600) | int) ~ 'hrs' %}\
         {% else %}\
-          {% set last_seen = ((diff / 86400) | int) ~ 'd' %}\
+          {% set last_seen = ((diff / 86400) | int) ~ 'd' %)\
         {% endif %}\
         {% set result.sensors = result.sensors + [clean_name ~ ' (' ~ last_seen ~ ')'] %}\
       {% endif %}\
@@ -116,7 +95,7 @@ variables:
 
 trigger:
   - platform: time
-    at: !input 'schedule.time'
+    at: !input 'schedule_time'
 
 condition:
   - '{{ sensors != "" and (day | int == 0 or day | int == now().isoweekday()) }}'
