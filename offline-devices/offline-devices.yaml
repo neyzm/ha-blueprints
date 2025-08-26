@@ -8,10 +8,9 @@ blueprint:
     duration:
       name: Duration
       description: Set Hours, Minutes, or both. Sensors not seen within this duration are considered offline. 
+      default: {}
       selector:
-        section:
-          collapsible: true
-          icon: mdi:timer-sand
+        object:
       inputs:
         hours:
           name: Hours
@@ -39,9 +38,9 @@ blueprint:
       name: Schedule
       description: Set time and day the test should run.
       icon: mdi:calendar-clock
+      default: {}
       selector:
-        section:
-          collapsible: true
+        object:
       inputs:
         time:
           name: Time
