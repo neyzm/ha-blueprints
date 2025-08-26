@@ -1,7 +1,8 @@
 blueprint:
   name: Offline Devices
-  description: Detect offline devices using 'last_seen'/'timestamp' (Z2M sensors).
-     **Version: v1.1**
+  description: >
+    Detect offline devices using 'last_seen'/'timestamp' (Z2M).
+    **Version: v1.1**
   domain: automation
   input:
     duration:
