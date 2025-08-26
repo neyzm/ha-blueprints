@@ -34,6 +34,45 @@ blueprint:
               unit_of_measurement: min
               mode: slider
               step: 1.0
+    schedule:
+      name: Schedule
+      description: Set time and day the test should run.
+      icon: mdi:calendar-clock
+      selector:
+        section:
+          collapsible: true
+      inputs:
+        time:
+          name: Time
+          description: Input time
+          icon: mdi:clock
+          default: '10:00:00'
+          selector:
+            time: {}
+        day:
+          name: Day
+          description: Set a specific day or run everyday.
+          icon: mdi:calendar
+          default: 0
+          selector:
+            select:
+              options:
+                - value: 0
+                  label: Everyday
+                - value: 1
+                  label: Monday
+                - value: 2
+                  label: Tuesday
+                - value: 3
+                  label: Wednesday
+                - value: 4
+                  label: Thursday
+                - value: 5
+                  label: Friday
+                - value: 6
+                  label: Saturday
+                - value: 7
+                  label: Sunday
     exclude:
       name: Excluded Sensors
       description: "'last seen' sensors (from devices that you want to exclude) to
@@ -55,7 +94,8 @@ blueprint:
 
 variables:
   day: !input 'schedule.day'
-  hours: !input 'schedule.hours'
+  hours: !input 'duration.hours'
+  minutes: !input 'duration.minutes'
   exclude: !input 'exclude'
   sensors: "{% set result = namespace(sensors=[]) %}\
     {% for state in states.sensor | rejectattr('attributes.device_class', 'undefined') | selectattr('attributes.device_class', '==', 'timestamp') %}\
@@ -78,7 +118,7 @@ variables:
 
 trigger:
   - platform: time
-    at: !input 'time'
+    at: !input 'schedule.time'
 
 condition:
   - '{{ sensors != "" and (day | int == 0 or day | int == now().isoweekday()) }}'
