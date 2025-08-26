@@ -1,7 +1,7 @@
 blueprint:
   name: Offline Devices
-  description: Check 'last_seen' in name and 'timestamp' device_class
-    ('last seen' Z2M sensors) to detect offline and if so execute an action.
+  description: Detect offline devices using 'last_seen'/'timestamp' (Z2M sensors).
+     **Version: v1.1**
   domain: automation
   input:
     duration:
@@ -75,9 +75,8 @@ blueprint:
                   label: Sunday
     exclude:
       name: Excluded Sensors
-      description: "'last seen' sensors (from devices that you want to exclude) to
-        exclude from detection. Only entities with 'last seen' in name and 'timestamp'
-        in device_class are supported, devices must be expanded!"
+      description: Choose sensors with `last_seen` or `timestamp` in the name to be excluded from detection.
+      icon: mdi:cancel
       default:
         entity_id: []
       selector:
@@ -86,8 +85,8 @@ blueprint:
             domain: sensor
     actions:
       name: Actions
-      description: Notifications or similar to be run. {{sensors}} is replaced with
-        the names of sensors being offline.
+      description: Use Actions to create notifications. Use `{{sensors}}` to output the offline devices.
+      icon: mdi:code-braces
       selector:
         action: {}
   source_url: https://github.com/neyzm/ha-blueprints/offline-devices.yaml
