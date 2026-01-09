@@ -62,8 +62,8 @@ fields:
       text:
         multiline: true
     name: Message
-    example: "Type your message..."
     required: true
+    icon: mdi:message-text
   
   media_players:
     selector:
@@ -74,6 +74,7 @@ fields:
     name: Speakers
     description: Select which speakers to play on
     required: true
+    icon: mdi:speaker-multiple
   
   volume:
     selector:
@@ -85,6 +86,7 @@ fields:
     name: Volume
     description: Set announcement volume (override)
     required: false
+    icon: mdi:volume-high
 
 variables:
   default_players: !input default_media_players
