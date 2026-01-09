@@ -4,48 +4,75 @@ name: Release (per sub-project) on Tag
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - 'ann-v*.*'
+      - 'ann-v*.*.*'
+      - 'ofd-v*.*'
+      - 'ofd-v*.*.*'
 
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    strategy:
-      matrix:
-        project:
-          - announce
-          - offline-devices
-          # add more sub-project folders here
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+
       - run: npm i -D conventional-changelog-cli
+
+      - name: Determine project and version
+        id: meta
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          case "$TAG" in
+            ann-v*) PROJECT_DIR="announce"; PROJECT_TITLE="Announce" ;;
+            ofd-v*) PROJECT_DIR="offline-devices"; PROJECT_TITLE="Offline Devices" ;;
+            *) echo "Unsupported tag prefix: $TAG"; exit 1 ;;
+          esac
+          VERSION="${TAG#*-v}"
+          echo "dir=$PROJECT_DIR" >> $GITHUB_OUTPUT
+          echo "title=$PROJECT_TITLE" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Generate changelog
-        working-directory: ${{ matrix.project }}
+        working-directory: ${{ steps.meta.outputs.dir }}
         run: |
           touch CHANGELOG.md
           npx conventional-changelog -p angular -i CHANGELOG.md -s || true
+
       - name: Commit if changed
         run: |
           if [ -n "$(git status --porcelain)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add ${{ matrix.project }}/CHANGELOG.md
-            git commit -m "docs(${{ matrix.project }}): update changelog for $GITHUB_REF_NAME" || true
+            git add "${{ steps.meta.outputs.dir }}/CHANGELOG.md"
+            git commit -m "docs(${{ steps.meta.outputs.dir }}): update changelog for $GITHUB_REF_NAME" || true
             git push || true
           fi
-      - name: Prepare release notes
-        working-directory: ${{ matrix.project }}
+
+      - name: Prepare release notes (latest section)
+        working-directory: ${{ steps.meta.outputs.dir }}
         run: |
-          npx conventional-changelog -p angular -r 2 > RELEASE_NOTES.md || echo "No recent changes" > RELEASE_NOTES.md
-      - name: Create GitHub Release
+          npx conventional-changelog -p angular -r 1 > RELEASE_NOTES.md || echo "No recent changes" > RELEASE_NOTES.md
+
+      - name: Append Full Changelog link
+        run: |
+          REPO="${{ github.repository }}"
+          CUR="${{ github.ref_name }}"
+          PREV="$(git tag --sort=-creatordate | grep -E '^(ann|ofd)-v[0-9]+\.[0-9]+(\.[0-9]+)?$' | grep -v "^$CUR$" | head -n1 || true)"
+          if [ -n "$PREV" ]; then
+            echo "" >> "${{ steps.meta.outputs.dir }}/RELEASE_NOTES.md"
+            echo "**Full Changelog**: https://github.com/$REPO/compare/$PREV...$CUR" >> "${{ steps.meta.outputs.dir }}/RELEASE_NOTES.md"
+          fi
+
+      - name: Create GitHub Release (single hyphen name)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          body_path: ${{ matrix.project }}/RELEASE_NOTES.md
-          name: "${{ github.ref_name }} — ${{ matrix.project }}"
+          body_path: ${{ steps.meta.outputs.dir }}/RELEASE_NOTES.md
+          name: "v${{ steps.meta.outputs.version }} - ${{ steps.meta.outputs.title }}"
