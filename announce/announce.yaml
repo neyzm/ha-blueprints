@@ -1,0 +1,178 @@
+blueprint:
+  name: Announce
+  description: >-
+    Announces a message on one or multiple media players 
+    using TTS with volume control, runtime device selection, and 
+    optional pre/post announcement actions.
+    version 1.0.0
+  domain: script
+  input:
+    text_to_speech_engine:
+      selector:
+        entity:
+          domain: tts
+      name: Text-to-Speech Engine
+      description: Select your TTS engine (Google, Piper, etc.)
+    
+    default_media_players:
+      selector:
+        entity:
+          domain: media_player
+          multiple: true
+      name: Default Media Players (Optional)
+      description: Pre-select default speakers (can be changed when running the script)
+      default: []
+    
+    announcement_volume:
+      name: Announcement Volume
+      description: Volume level for announcements (0.0 to 1.0)
+      default: 0.6
+      selector:
+        number:
+          min: 0.0
+          max: 1.0
+          step: 0.05
+          mode: slider
+    
+    restore_volume:
+      name: Restore Original Volume
+      description: Restore the previous volume level after announcement
+      default: true
+      selector:
+        boolean:
+    
+    fade_in:
+      name: Fade In Duration (seconds)
+      description: Gradually increase volume before announcement (0 to disable)
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 5
+          step: 0.5
+          mode: slider
+
+mode: queued
+max: 10
+
+fields:
+  message:
+    selector:
+      text:
+        multiline: true
+    name: Message
+    description: The message to broadcast
+    required: true
+  
+  media_players:
+    selector:
+      entity:
+        domain: media_player
+        multiple: true
+    name: Target Media Players
+    description: Select which speakers to announce on (overrides defaults if specified)
+    required: false
+  
+  volume:
+    selector:
+      number:
+        min: 0.0
+        max: 1.0
+        step: 0.05
+        mode: slider
+    name: Custom Volume
+    description: Override the default announcement volume for this message
+    required: false
+
+variables:
+  target_players: >
+    {% if media_players is defined and media_players %}
+      {{ media_players }}
+    {% else %}
+      {{ default_media_players }}
+    {% endif %}
+  announcement_vol: >
+    {% if volume is defined and volume %}
+      {{ volume }}
+    {% else %}
+      {{ announcement_volume }}
+    {% endif %}
+  should_restore: !input restore_volume
+  fade_duration: !input fade_in
+  original_volumes: >
+    {% set ns = namespace(volumes={}) %}
+    {% for player in target_players %}
+      {% set ns.volumes = dict(ns.volumes, **{player: state_attr(player, 'volume_level')}) %}
+    {% endfor %}
+    {{ ns.volumes }}
+
+sequence:
+  # Store original volumes
+  - variables:
+      stored_volumes: "{{ original_volumes }}"
+  
+  # Fade in if enabled
+  - if:
+      - condition: template
+        value_template: "{{ fade_duration > 0 }}"
+    then:
+      - repeat:
+          count: "{{ (fade_duration * 2) | int }}"
+          sequence:
+            - service: media_player.volume_set
+              data:
+                volume_level: >
+                  {{ (announcement_vol * (repeat.index / (fade_duration * 2))) | float }}
+              target:
+                entity_id: "{{ target_players }}"
+            - delay:
+                milliseconds: 500
+  
+  # Set announcement volume (if not fading)
+  - if:
+      - condition: template
+        value_template: "{{ fade_duration == 0 }}"
+    then:
+      - service: media_player.volume_set
+        data:
+          volume_level: "{{ announcement_vol }}"
+        target:
+          entity_id: "{{ target_players }}"
+  
+  # Small delay to ensure volume is set
+  - delay:
+      milliseconds: 200
+  
+  # Send TTS announcement
+  - service: tts.speak
+    data:
+      media_player_entity_id: "{{ target_players }}"
+      message: "{{ message }}"
+    target:
+      entity_id: !input text_to_speech_engine
+  
+  # Wait for announcement to complete
+  - wait_template: >
+      {% set ns = namespace(all_idle=true) %}
+      {% for player in target_players %}
+        {% if not is_state(player, 'idle') and not is_state(player, 'off') %}
+          {% set ns.all_idle = false %}
+        {% endif %}
+      {% endfor %}
+      {{ ns.all_idle }}
+    timeout: "00:05:00"
+    continue_on_timeout: true
+  
+  # Restore original volumes
+  - if:
+      - condition: template
+        value_template: "{{ should_restore }}"
+    then:
+      - repeat:
+          for_each: "{{ target_players }}"
+          sequence:
+            - service: media_player.volume_set
+              data:
+                volume_level: "{{ stored_volumes[repeat.item] }}"
+              target:
+                entity_id: "{{ repeat.item }}"
