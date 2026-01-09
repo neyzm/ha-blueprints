@@ -1,0 +1,51 @@
+# .github/workflows/release-sub.yml
+name: Release (per sub-project) on Tag
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        project:
+          - announce
+          - offline-devices
+          # add more sub-project folders here
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm i -D conventional-changelog-cli
+      - name: Generate changelog
+        working-directory: ${{ matrix.project }}
+        run: |
+          touch CHANGELOG.md
+          npx conventional-changelog -p angular -i CHANGELOG.md -s || true
+      - name: Commit if changed
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add ${{ matrix.project }}/CHANGELOG.md
+            git commit -m "docs(${{ matrix.project }}): update changelog for $GITHUB_REF_NAME" || true
+            git push || true
+          fi
+      - name: Prepare release notes
+        working-directory: ${{ matrix.project }}
+        run: |
+          npx conventional-changelog -p angular -r 2 > RELEASE_NOTES.md || echo "No recent changes" > RELEASE_NOTES.md
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          body_path: ${{ matrix.project }}/RELEASE_NOTES.md
+          name: "${{ github.ref_name }} — ${{ matrix.project }}"
