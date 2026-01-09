@@ -4,7 +4,7 @@ blueprint:
     Announces a message on one or multiple media players 
     using TTS with volume control, runtime device selection, and 
     optional pre/post announcement actions.
-    version 1.0.0
+    version 1.1
   domain: script
   input:
     text_to_speech_engine:
@@ -16,12 +16,13 @@ blueprint:
     
     default_media_players:
       selector:
-        entity:
-          domain: media_player
-          multiple: true
+        target:
+          entity:
+            domain: media_player
+            device_class: speaker
       name: Default Media Players (Optional)
       description: Pre-select default speakers (can be changed when running the script)
-      default: []
+      default: {}
     
     announcement_volume:
       name: Announcement Volume
@@ -61,17 +62,18 @@ fields:
       text:
         multiline: true
     name: Message
-    description: The message to broadcast
+    example: "Type your message..."
     required: true
   
   media_players:
     selector:
-      entity:
-        domain: media_player
-        multiple: true
-    name: Target Media Players
-    description: Select which speakers to announce on (overrides defaults if specified)
-    required: false
+      target:
+        entity:
+          domain: media_player
+          device_class: speaker
+    name: Speakers
+    description: Select which speakers to play on
+    required: true
   
   volume:
     selector:
@@ -80,16 +82,19 @@ fields:
         max: 1.0
         step: 0.05
         mode: slider
-    name: Custom Volume
-    description: Override the default announcement volume for this message
+    name: Volume
+    description: Set announcement volume (override)
     required: false
 
 variables:
+  default_players: !input default_media_players
   target_players: >
-    {% if media_players is defined and media_players %}
-      {{ media_players }}
+    {% if media_players is defined and media_players.entity_id is defined %}
+      {{ media_players.entity_id }}
+    {% elif default_players.entity_id is defined %}
+      {{ default_players.entity_id }}
     {% else %}
-      {{ default_media_players }}
+      []
     {% endif %}
   announcement_vol: >
     {% if volume is defined and volume %}
@@ -101,7 +106,8 @@ variables:
   fade_duration: !input fade_in
   original_volumes: >
     {% set ns = namespace(volumes={}) %}
-    {% for player in target_players %}
+    {% set players = target_players if target_players is iterable and target_players is not string else [target_players] %}
+    {% for player in players %}
       {% set ns.volumes = dict(ns.volumes, **{player: state_attr(player, 'volume_level')}) %}
     {% endfor %}
     {{ ns.volumes }}
@@ -110,6 +116,7 @@ sequence:
   # Store original volumes
   - variables:
       stored_volumes: "{{ original_volumes }}"
+      player_list: "{{ target_players if target_players is iterable and target_players is not string else [target_players] }}"
   
   # Fade in if enabled
   - if:
@@ -124,7 +131,7 @@ sequence:
                 volume_level: >
                   {{ (announcement_vol * (repeat.index / (fade_duration * 2))) | float }}
               target:
-                entity_id: "{{ target_players }}"
+                entity_id: "{{ player_list }}"
             - delay:
                 milliseconds: 500
   
@@ -137,7 +144,7 @@ sequence:
         data:
           volume_level: "{{ announcement_vol }}"
         target:
-          entity_id: "{{ target_players }}"
+          entity_id: "{{ player_list }}"
   
   # Small delay to ensure volume is set
   - delay:
@@ -146,7 +153,7 @@ sequence:
   # Send TTS announcement
   - service: tts.speak
     data:
-      media_player_entity_id: "{{ target_players }}"
+      media_player_entity_id: "{{ player_list }}"
       message: "{{ message }}"
     target:
       entity_id: !input text_to_speech_engine
@@ -154,7 +161,7 @@ sequence:
   # Wait for announcement to complete
   - wait_template: >
       {% set ns = namespace(all_idle=true) %}
-      {% for player in target_players %}
+      {% for player in player_list %}
         {% if not is_state(player, 'idle') and not is_state(player, 'off') %}
           {% set ns.all_idle = false %}
         {% endif %}
@@ -169,7 +176,7 @@ sequence:
         value_template: "{{ should_restore }}"
     then:
       - repeat:
-          for_each: "{{ target_players }}"
+          for_each: "{{ player_list }}"
           sequence:
             - service: media_player.volume_set
               data:
